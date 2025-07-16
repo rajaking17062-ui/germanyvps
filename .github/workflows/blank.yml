@@ -4,30 +4,40 @@ on:
   workflow_dispatch:
     inputs:
       ngrok_token:
-        description: 'Paste your Ngrok Authtoken here'
+        description: 'Paste your Ngrok Authtoken'
         required: true
-        default: ''
 
 jobs:
   build:
     runs-on: windows-latest
 
     steps:
-    - name: Step 1 - Set Up Ngrok
+    - name: Install Ngrok
+      shell: powershell
       run: |
-        choco install ngrok -y
-        ngrok config add-authtoken ${{ github.event.inputs.ngrok_token }}
-        
-    - name: Step 2 - Enable RDP
+        Invoke-WebRequest -Uri https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
+        Expand-Archive ngrok.zip
+        Move-Item .\ngrok.exe C:\ngrok.exe
+
+    - name: Start RDP & Configure
+      shell: powershell
       run: |
         net user Administrator MyNewPassword123!
-        Enable-PSRemoting -Force
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Start-Process ngrok -ArgumentList "tcp --region=eu 3389"
+        Enable-PSRemoting -Force
 
-    - name: Step 3 - Show RDP Info
+    - name: Start Ngrok Tunnel (Germany)
+      shell: powershell
       run: |
-        echo "✅ Windows RDP (Germany) is now running!"
-        echo "Wait 1–2 minutes, then check logs for Ngrok IP"
-        timeout /t 60
+        C:\ngrok.exe authtoken "${{ github.event.inputs.ngrok_token }}"
+        Start-Process -NoNewWindow -FilePath "C:\ngrok.exe" -ArgumentList "tcp --region=eu 3389"
+        Start-Sleep -Seconds 10
+
+    - name: Show RDP Info
+      shell: powershell
+      run: |
+        Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:4040/api/tunnels" > tunnel.json
+        Get-Content tunnel.json
+        echo "Username: Administrator"
+        echo "Password: MyNewPassword123!"
